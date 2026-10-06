@@ -1,0 +1,22 @@
+# secrets — JANGAN pernah commit
+*.key
+.brightdata_key
+.gh_token
+.env
+.env.*
+
+# runtime artifacts
+.venv/
+__pycache__/
+*.pyc
+*.html
+live_proxies.json
+bd_search_*.json
+!skills/amazon-uk-scraper/references/bd_search_creatine.json
+bd_dp_*.json
+!skills/amazon-uk-scraper/references/bd_dp_B00T7L20AQ.json
+l3_*.html
+l3_result.json
+l3_verify.json
+!skills/amazon-uk-scraper/references/l3_verify.json
+browser_harvest_*.json
