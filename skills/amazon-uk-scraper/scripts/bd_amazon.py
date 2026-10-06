@@ -1,6 +1,6 @@
-"""Bright Data jalur utama Amazon.co.uk — search + DP via datasets API.
-Key: ~/.brightdata_key (chmod 600). Dataset search=gd_lwdb4vjm1ehb499uxs,
-DP=gd_l7q7dkf244hwjntr0. Currency field typo 'GPB' (=GBP) — normalisasi.
+"""Bright Data primary path for Amazon.co.uk — search + DP via datasets API.
+Key: ~/.brightdata_key (chmod 600) or BRIGHTDATA_KEY env. Dataset search=gd_lwdb4vjm1ehb499uxs,
+DP=gd_l7q7dkf244hwjntr0. Currency field typo 'GPB' (=GBP) — normalized.
 Run: python3 bd_amazon.py search "creatine" | python3 bd_amazon.py dp B00T7L20AQ
 Proven 2026-10-06: search 50 rec/49 harga, DP 100 keys final_price 9.89.
 """
@@ -11,15 +11,15 @@ import sys
 SEARCH_DS = "gd_lwdb4vjm1ehb499uxs"
 DP_DS = "gd_l7q7dkf244hwjntr0"
 
-# urutan kolom dropship-friendly
+# dropship-friendly column order
 SEARCH_COLS = ["asin", "name", "brand", "final_price", "initial_price", "currency",
                "rating", "num_ratings", "is_prime", "sponsored", "badge", "sold",
                "delivery", "url", "page_number", "rank_on_page"]
 
 
 def key() -> str:
-    """Baca Bright Data API key: env BRIGHTDATA_KEY dulu, fallback file ~/.brightdata_key.
-    Jangan pernah hardcode key di kode — key TIDAK boleh masuk repo."""
+    """Read the Bright Data API key: BRIGHTDATA_KEY env first, ~/.brightdata_key fallback.
+    Never hardcode the key — it must NEVER enter the repo."""
     import os
     env = os.environ.get("BRIGHTDATA_KEY", "").strip()
     if env:
@@ -28,7 +28,7 @@ def key() -> str:
 
 
 def call(dataset: str, payload: dict, timeout: int = 120) -> str:
-    """POST datasets API, return raw body. 'Customer is not active' transient -> retry 1x."""
+    """POST the datasets API, return the raw body. 'Customer is not active' is transient -> retry 1x."""
     import time
     body = ""
     for attempt in range(2):
@@ -76,7 +76,7 @@ def main() -> None:
         recs = bd_search(kw, pages)
         json.dump(recs, open(f"bd_search_{kw}.json", "w"), indent=1)
         priced = sum(1 for r in recs if r.get("final_price"))
-        print(f"search '{kw}': {len(recs)} rec, {priced} berhaga -> bd_search_{kw}.json", flush=True)
+        print(f"search '{kw}': {len(recs)} rec, {priced} priced -> bd_search_{kw}.json", flush=True)
         for r in recs[:10]:
             print(f"  {r.get('asin')} {r.get('final_price')} {r.get('currency')} prime={r.get('is_prime')} | {(r.get('name') or '')[:60]}", flush=True)
     elif mode == "dp":

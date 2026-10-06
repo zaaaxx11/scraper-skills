@@ -1,59 +1,64 @@
 # Framework
 
-## 1. Musuh: AWS WAF (bukan Cloudflare)
+## 1. The enemy: bot-protection, not the site
 
-Sinyal: `window.gokuProps` + `AwsWafIntegration/challenge.js` + `token.awswaf.com`.
-Implikasi: Turnstile solver / `solve_cloudflare=True` TIDAK ngefek. Masalahnya =
-**bot-fingerprint + IP reputation + cookie consent**, bukan rule-bypass.
-Teknik injeksi (encoding, HPP, chunked, path tricks, smuggling) DIBUANG — cuma menaikkan risiko ban.
+Typical stack: AWS WAF (`window.gokuProps`, `AwsWafIntegration/challenge.js`),
+Cloudflare Turnstile, Akamai / PerimeterX / DataDome, plus cookie-consent walls.
+Implication: **the problem is bot-fingerprint + IP reputation + consent state**,
+not rule-bypass. Injection tricks (encoding, HPP, chunked, path tricks, smuggling)
+are DISCARDED — they only raise ban risk. Identify the protector first
+(headers, challenge scripts, status codes), then pick the ladder level.
 
-## 2. Detector — 7 sinyal (satu-satunya gerbang keputusan)
+## 2. Detector — 6 signals (the only decision gate)
 
-```
-detect(status, html):
-  202 / gokuProps / awswaf          → WAF_202        (naik ladder)
-  503 / Amazonsorry                 → THROTTLE_503   (ganti proxy + cooldown)
-  200 + 0 asin + cookie preferences → COOKIE_WALL    (accept + persist cookie)
-  200 + 0 asin (tanpa cookie)       → EMPTY_200      (retry / naik ladder)
-  200 + asin + £/a-price-whole      → SUCCESS        (parse, selesai)
-  200 + asin TANPA harga inline     → SUCCESS_VARIANT (grid variant-family → DP)
-  else                              → OTHER          (anggap gagal, jangan parse)
-```
-
-`SUCCESS_VARIANT` ditemukan 2026-10-06: `200 / 964KB / 53 asin`, `a-price-whole = 0`,
-`a-offscreen` hanya `"N sizes, N flavours"` — judul 100% real (Applied, Myprotein, USN…).
-
-## 3. Arsitektur fallback
-
-```
-probe murah (L1, 1 req) → detector → L5 langsung bila ada key
-                        → L3 + proxy sehat (validasi dulu!) bila tanpa key
-                        → L4 browser session bila L3 mentok
-                        → 503 = STOP + cooldown 10 mnt (bukan retry)
+```python
+detect(status, html, markers) -> signal:
+  challenge markers present (any status) → CHALLENGE   # climb ladder
+  429/503 or sorry/throttle page        → THROTTLED   # rotate proxy + cooldown
+  200 + 0 data markers + consent text   → CONSENT_WALL # accept + persist cookies
+  200 + 0 data markers (no consent)     → EMPTY        # retry / climb ladder
+  200 + data markers + price markers    → SUCCESS      # parse, done
+  200 + data markers, NO inline price   → PARTIAL      # variant-family → detail pages
+  else                                  → UNKNOWN      # treat as failure, never parse
 ```
 
-Prinsip:
-- **Murah dulu, mahal kemudian** — 1 req Fetcher sebelum bakar browser/proxy.
-- **Validasi sebelum pakai** — proxy gratis 2–5% hidup; pool sehat disimpan, bukan diasumsikan.
-- **Sukses = konten, bukan status** — `data-asin > 0` + harga/judul real + file di disk.
-- **Rotasi, bukan over-retry** — 1 IP hangat mendingin dalam hitungan menit.
+Discovered 2026-10-06 (Amazon.co.uk): `PARTIAL` = `200 / 964KB / 53 IDs`,
+zero inline-price nodes, consent text present — 100% real titles
+(Applied Nutrition, Myprotein, USN…) with prices only on detail pages.
+
+## 3. Fallback architecture
+
+```
+cheap probe (L1, 1 req) → detector → L5 immediately if a key exists
+                                    → L3 + validated proxies if keyless
+                                    → L4 browser session if L3 stalls
+                                    → THROTTLED = STOP + 10 min cooldown (never blind-retry)
+```
+
+Principles:
+- **Cheap first, expensive later** — one Fetcher request before burning browser/proxy/credit.
+- **Validate before use** — free proxies are 2–5% alive; a healthy pool is stored, never assumed.
+- **Success = content, not status** — data markers `> 0` + real titles/prices + file on disk.
+- **Rotate, don't over-retry** — a warm IP cools down within minutes.
 
 ## 4. Decision matrix
 
-| Kondisi | Jalur |
+| Condition | Path |
 |---|---|
-| Ada Bright Data key + kredit | L5 (search + DP) — tanpa drama WAF |
-| Tanpa key, butuh search grid | L3 (Stealthy + proxy GB tervalidasi) |
-| L3 202/503 semua proxy | L4 browser session (search OK, DP OK) |
-| DP via proxy 202 | DP via L5 / browser (endpoint DP lebih strict) |
-| Grid tanpa harga inline | SUCCESS_VARIANT → DP per-variant, jangan klaim harga grid |
-| Butuh £ (dapat IDR) | zipcode UK (L5) / locale en-GB + UK postcode (L3/L4) |
+| Bright Data key + credit | L5 (search + detail) — no WAF drama |
+| Keyless, need listing grid | L3 (Stealthy + validated geo proxies) |
+| L3 blocked on all proxies | L4 browser session (search OK, detail OK) |
+| Detail endpoint blocks proxy | Detail via L5 / browser (detail is stricter than search) |
+| Grid has no inline prices | PARTIAL → per-variant detail, never quote grid prices |
+| Wrong currency/geo | `zipcode` (L5) / `locale` + regional postcode (L3/L4) |
 
-## 5. Selector grid (diukur dari DOM asli)
+## 5. Per-target profile (what each skill must define)
 
-- Kartu: `[data-component-type="s-search-result"][data-asin]` → `data-asin` = ASIN
-- Judul: `h2.innerText` (**BUKAN** `h2 a span` — NULL di DOM ini)
-- Harga inline: `.a-price .a-offscreen` / `a-price-whole` (bisa ABSEN di variant-family)
-- Rating: `[aria-label*="out of 5 stars"]` · Prime: `/prime/i` di teks kartu
-- Shipping strict: `#mir-layout-DELIVERY_BLOCK` (`FREE delivery` → 0, else `£X.99`)
-- `totalPrice = price + shipping`; tie-break: min → most-common → `amazon-uk`
+Every skill under `skills/` pins these — see `skills/_template/`:
+
+- `CHALLENGE_MARKERS` — strings proving a challenge shell (e.g. `gokuprops`, `awswaf`)
+- `THROTTLE_MARKERS` — e.g. `amazonsorry`, sorry-page titles, `429`
+- `DATA_SELECTOR` — listing-card selector + ID attribute (e.g. `[data-component-type="s-search-result"][data-asin]`)
+- `TITLE_SELECTOR` / `PRICE_SELECTOR` / `RATING_SELECTOR` — measured from the real DOM, never assumed
+- `L5_DATASETS` — Bright Data dataset IDs if known (see `docs/TARGETS.md`)
+- `GEO` — locale, timezone, postcode/zipcode that yields correct currency

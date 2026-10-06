@@ -1,8 +1,8 @@
 """Amazon.co.uk ladder scraper — L0 probe -> L1 Fetcher -> L3 Stealthy+GB proxy.
 Detector: 202/gokuProps | 503 Amazonsorry | 200 cookie-wall | 200 + data-asin = SUKSES.
 Run: source .venv/bin/activate && python3 amazon_ladder.py "creatine" 2
-Fakta: L1 202/2012B/goku=True (2026-10-06). L3 target: 200 + data-asin + £.
-Asumsi: Proxifly GB socks5 publik (fluktuatif) — pool sehat divalidasi dulu.
+Fact: L1 202/2012B/goku=True (2026-10-06). L3 target: 200 + data-asin + £.
+Assumption: public Proxifly GB socks5 (flaky) — validate a healthy pool first.
 """
 import json
 import random
@@ -16,7 +16,7 @@ UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
 
 
 def detect(status: int, html: str) -> str:
-    """Klasifikasi sinyal blokir Amazon.
+    """Classify Amazon block signals.
     Return: WAF_202 | THROTTLE_503 | COOKIE_WALL | EMPTY_200 | SUCCESS | SUCCESS_VARIANT | OTHER.
     SUCCESS_VARIANT = grid real (data-asin>0) tapi tanpa harga inline (variant-family,
     harga di DP). Ditemukan 2026-10-06: 200/964KB/53 asin, a-offscreen cuma 'N sizes'.
@@ -39,13 +39,13 @@ def detect(status: int, html: str) -> str:
 
 
 def parse_grid(html: str) -> list:
-    """Parse kartu search-result dari HTML sukses. Return list dict(asin,title,price,prime)."""
+    """Parse search-result cards from success HTML. Returns list of dict(asin,title,price,prime)."""
     from selectolax.parser import HTMLParser  # noqa - fallback ke regex bila absen
     raise NotImplementedError  # placeholder, implementasi regex di bawah
 
 
 def parse_grid_regex(html: str) -> list:
-    """Parse grid tanpa dependency tambahan (regex, cukup untuk proof)."""
+    """Parse the grid with no extra dependency (regex, enough for proof)."""
     cards = re.findall(r'data-asin="(B0[A-Z0-9]{8})"(.*?)(?=data-asin="B0|\Z)', html, re.S)
     out = []
     for asin, chunk in cards:
@@ -63,7 +63,7 @@ def parse_grid_regex(html: str) -> list:
 
 
 def l0_probe(query: str) -> tuple:
-    """L0: curl polos — ekspektasi gagal (202/cookie-wall), cuma buat deteksi sinyal."""
+    """L0: plain curl — expected to fail (202/cookie-wall), only classifies the signal."""
     url = SEARCH.format(q=urllib.parse.quote_plus(query))
     req = urllib.request.Request(url, headers=UA)
     try:
@@ -80,7 +80,7 @@ def l0_probe(query: str) -> tuple:
 
 
 def l1_fetch(query: str) -> tuple:
-    """L1: Fetcher murah — baseline. Bukti: 202/2012B di DC IP."""
+    """L1: cheap Fetcher — baseline. Evidence: 202/2012B on DC IP."""
     from scrapling.fetchers import Fetcher
     url = SEARCH.format(q=urllib.parse.quote_plus(query))
     p = Fetcher.get(url, impersonate="chrome", stealthy_headers=True, timeout=30)
@@ -89,7 +89,7 @@ def l1_fetch(query: str) -> tuple:
 
 
 def gb_pool(n: int = 10) -> list:
-    """Ambil n proxy GB acak dari Proxifly (jsDelivr, update 5 mnt)."""
+    """Fetch n random GB proxies from Proxifly (jsDelivr, 5-min refresh)."""
     url = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/countries/GB/data.json"
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=25) as r:
@@ -99,7 +99,7 @@ def gb_pool(n: int = 10) -> list:
 
 
 def l3_stealth(query: str, proxy: str, timeout_ms: int = 60000) -> tuple:
-    """L3: StealthyFetcher + proxy GB. Senjata utama — target SUCCESS."""
+    """L3: StealthyFetcher + GB proxy. Primary free path — target SUCCESS."""
     from scrapling.fetchers import StealthyFetcher
     url = SEARCH.format(q=urllib.parse.quote_plus(query))
     p = StealthyFetcher.fetch(
@@ -139,16 +139,16 @@ def main() -> None:
         print(f"   status={s3} len={len(h3)} asin={h3.count('data-asin')} signal={sig}", flush=True)
         if sig == "SUCCESS":
             items = parse_grid_regex(h3)
-            print(f"   TEMBUS ✅ {len(items)} kartu", flush=True)
+            print(f"   THROUGH ✅ {len(items)} cards", flush=True)
             for it in items[:5]:
                 print(f"   - {it['asin']} | {it['price']} | prime={it['prime']} | {it['title'][:60]}", flush=True)
             with open("l3_success.html", "w") as f:
                 f.write(h3)
             with open("l3_items.json", "w") as f:
                 json.dump(items, f, indent=1)
-            print("   tersimpan: l3_success.html + l3_items.json", flush=True)
+            print("   saved: l3_success.html + l3_items.json", flush=True)
             return
-    print("L3 BELUM tembus — coba lagi / tambah proxy / IP VPS kena throttle berat.", flush=True)
+    print("L3 NOT through yet — retry / add proxies / VPS IP heavily throttled.", flush=True)
 
 
 if __name__ == "__main__":

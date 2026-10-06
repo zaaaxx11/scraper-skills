@@ -1,4 +1,4 @@
-# secrets — JANGAN pernah commit
+# secrets — NEVER commit
 *.key
 .brightdata_key
 .gh_token

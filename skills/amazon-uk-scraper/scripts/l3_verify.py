@@ -1,4 +1,4 @@
-"""L3 verify: fetch ulang via proxy pemenang, simpan HTML SELALU, parse + buktikan.
+"""L3 verify: re-fetch via the winning proxy, ALWAYS save HTML, parse + prove.
 Run: python3 l3_verify.py "creatine" -> l3_verify.html + l3_verify.json
 """
 import json
@@ -27,7 +27,7 @@ def parse_grid(html: str) -> list:
 def main() -> None:
     from scrapling.fetchers import StealthyFetcher
     query = sys.argv[1] if len(sys.argv) > 1 else "creatine"
-    proxy = "http://51.170.133.249:80"  # pemenang 08:18 — 200/979KB/53 asin
+    proxy = "http://51.170.133.249:80"  # winner 08:18 — 200/979KB/53 asins
     url = "https://www.amazon.co.uk/s?k=" + urllib.parse.quote_plus(query)
     print(f"fetch via {proxy} ...", flush=True)
     try:
@@ -45,9 +45,9 @@ def main() -> None:
         body, status = "", 0
     open("l3_verify.html", "w").write(body)
     print(f"status={status} len={len(body)} asin_attr={body.count('data-asin')} gbp={body.count(chr(163))} goku={'gokuprops' in body.lower()} cookie={'cookie preferences' in body.lower()}", flush=True)
-    print(f"HTML tersimpan: l3_verify.html ({len(body)} bytes)", flush=True)
+    print(f"HTML saved: l3_verify.html ({len(body)} bytes)", flush=True)
     items = parse_grid(body)
-    print(f"kartu terparse: {len(items)}", flush=True)
+    print(f"cards parsed: {len(items)}", flush=True)
     for it in items[:10]:
         print(f"  - {it['asin']} | {it['price']} | {it['title'][:60]}", flush=True)
     json.dump({"status": status, "len": len(body), "items": items}, open("l3_verify.json", "w"), indent=1)

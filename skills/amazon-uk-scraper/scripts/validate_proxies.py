@@ -1,4 +1,4 @@
-"""Validasi proxy GB Proxifly: curl cepat per proxy, simpan yang hidup.
+"""Validate Proxifly GB proxies: fast curl per proxy, keep responders.
 Run: python3 validate_proxies.py [N=40] -> live_proxies.json
 """
 import json
@@ -11,6 +11,7 @@ TARGET = "https://www.amazon.co.uk/s?k=creatine"
 
 
 def fetch_pool() -> list:
+    """Fetch the GB proxy list from Proxifly (jsDelivr, 5-min refresh)."""
     url = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/countries/GB/data.json"
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=25) as r:
@@ -18,7 +19,7 @@ def fetch_pool() -> list:
 
 
 def test_proxy(proxy: str, timeout: int = 15) -> dict:
-    """curl via proxy, return {proxy, code, size, ms}. code=0 kalau proxy mati."""
+    """curl via proxy, return {proxy, code, size, ms}. code=0 means the proxy is dead."""
     import time
     t0 = time.time()
     try:
@@ -52,7 +53,7 @@ def main() -> None:
     live.sort(key=lambda x: x["ms"])
     with open("live_proxies.json", "w") as f:
         json.dump(live, f, indent=1)
-    print(f"HIDUP: {len(live)}/{len(cand)} -> live_proxies.json", flush=True)
+    print(f"ALIVE: {len(live)}/{len(cand)} -> live_proxies.json", flush=True)
     for r in live[:10]:
         print(f"  {r['proxy']} code={r['code']} size={r['size']} ms={r['ms']}", flush=True)
 

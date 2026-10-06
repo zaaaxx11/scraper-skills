@@ -1,41 +1,41 @@
 # Workflow
 
-End-to-end: dari keyword mentah → data harga UK siap pakai.
+End-to-end: from a raw keyword → clean, priced, geo-correct data.
 
 ```mermaid
 flowchart TD
-    A[keyword / ASIN list] --> B{ada BRIGHTDATA_KEY?}
-    B -->|ya| C[L5 search: bd_amazon.py search kw pages]
-    C --> D[JSON: asin + name + final_price GBP\n+ rating + prime + sponsored]
-    D --> E[per-ASIN: bd_amazon.py dp ASIN]
-    E --> F[DP 100 keys: seller + variants\n+ shipping + reviews]
-    F --> G[totalPrice = price + shipping\ntie-break: min → most-common → amazon-uk]
-    G --> H✅[deliverable CSV/JSON]
+    A[keyword / product URL list] --> B{BRIGHTDATA_KEY set?}
+    B -->|yes| C[L5 search: wrapper search kw pages]
+    C --> D[JSON: id + name + final_price\n+ rating + prime + sponsored]
+    D --> E[per-ID: wrapper detail call]
+    E --> F[detail fields: seller + variants\n+ shipping + reviews]
+    F --> G[totalPrice = price + shipping\ntie-break: min → most-common → first-party]
+    G --> H✅[CSV/JSON deliverable]
 
-    B -->|tidak| I[L1 Fetcher probe\nmurah, 1 req]
+    B -->|no| I[L1 cheap probe\n1 request]
     I --> J{detector}
-    J -->|202 WAF| K[validate_proxies.py\nambil pool GB sehat]
-    K --> L[L3 Stealthy + proxy\nwait_selector data-asin]
+    J -->|challenge shell| K[validate proxies\ntake a healthy geo pool]
+    K --> L[L3 Stealthy + proxy\nwait for data selector]
     L --> M{detector}
-    M -->|SUCCESS / VARIANT| N[parse grid\nASIN + judul]
-    N --> O[DP per-variant\nvia browser session]
+    M -->|SUCCESS / PARTIAL| N[parse grid\nIDs + titles]
+    N --> O[per-variant detail\nvia browser session]
     O --> G
-    M -->|202/503| P[ganti proxy\nmax 3-5x]
-    P -->|habis| Q[cooldown 10 mnt\natau pakai L5]
-    J -->|200 + asin| N
+    M -->|blocked| P[rotate proxy\nmax 3-5x]
+    P -->|exhausted| Q[cooldown 10 min\nor switch to L5]
+    J -->|data markers| N
 ```
 
-## Tahapan
+## Stages
 
-1. **Probe (L1)** — 1 request murah, klasifikasi sinyal. Jangan langsung bakar proxy mahal.
-2. **Validasi proxy** — batch 40–80 via curl cepat (`--max-time 15`), simpan yang `code != 0`. Ekspektasi 2–5% hidup.
-3. **Harvest (L5/L3/L4)** — search page dulu (ASIN + judul), baru DP per-variant (harga final).
-4. **Verify dari disk** — `200` saja bukan bukti. Wajib: `data-asin > 0` + (`£`/`a-price-whole` atau judul real) + file tersimpan.
-5. **Match & deliver** — `totalPrice = price + shipping`; tie-break harga min → frekuensi terbanyak → `amazon-uk`.
+1. **Probe (L1)** — one cheap request, classify the signal. Never burn an expensive proxy first.
+2. **Validate proxies** — batches of 40–80 via fast curl (`--max-time 15`), keep responders (`code != 0`). Expect 2–5% alive.
+3. **Harvest (L5/L3/L4)** — search/listing page first (IDs + titles), then detail per variant (final price).
+4. **Verify from disk** — `200` alone is NOT proof. Required: data markers `> 0` + (price markers or real titles) + saved file.
+5. **Match & deliver** — `totalPrice = price + shipping`; tie-break: lowest price → most frequent → first-party seller.
 
-## Aturan panen sesi browser
+## Browser-session harvest rules
 
-- Batch kecil (~14 ID/call, concurrency ≤4, gap ~250ms) — return map di call yang sama.
-- `200 → 503` = sinyal BERHENTI + cooldown, bukan retry membabi-buta.
-- Jangan percaya `localStorage` (interstitial me-reset) / sink `127.0.0.1` (mixed-content block).
-- Persist per-batch ke disk — sesi bisa mati kapan saja.
+- Small batches (~14 IDs/call, concurrency ≤4, ~250ms gap) — return the map in the same call.
+- `200 → 503` means STOP + cooldown, not blind retry.
+- Don't trust `localStorage` (interstitials wipe it) or `127.0.0.1` sinks (mixed-content block).
+- Persist per-batch to disk — sessions can die at any time.

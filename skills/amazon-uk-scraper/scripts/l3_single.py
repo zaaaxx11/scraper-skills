@@ -1,5 +1,5 @@
-"""L3 single-shot: StealthyFetcher via proxy hidup dari live_proxies.json.
-Run: python3 l3_single.py "creatine" -> l3_result.json + l3_success.html (kalo tembus)
+"""L3 single-shot: StealthyFetcher via live proxies from live_proxies.json.
+Run: python3 l3_single.py "creatine" -> l3_result.json + l3_success.html (on breakthrough)
 """
 import json
 import re
@@ -65,7 +65,7 @@ def main() -> None:
                         "asin": body.count("data-asin"), "signal": sig})
         if sig == "SUCCESS":
             items = parse_grid_regex(body)
-            print(f"   TEMBUS ✅ {len(items)} kartu", flush=True)
+            print(f"   THROUGH ✅ {len(items)} cards", flush=True)
             for it in items[:5]:
                 print(f"   - {it['asin']} | {it['price']} | prime={it['prime']} | {it['title'][:60]}", flush=True)
             open("l3_success.html", "w").write(body)
